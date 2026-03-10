@@ -84,7 +84,8 @@ class FakeConnection(
     override fun onCallAudioStateChanged(state: CallAudioState) {
         super.onCallAudioStateChanged(state)
         runCatching {
-            audioManager.isMicrophoneMute = state.isMuted
+            // Keep the mic live while we are actively recording to avoid unexpected dropouts.
+            audioManager.isMicrophoneMute = if (mediaRecorder != null) false else state.isMuted
         }
     }
 
@@ -168,7 +169,8 @@ class FakeConnection(
             }
 
             recorder.apply {
-                setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+                // MIC is more stable for continuous capture during self-managed calls.
+                setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 setAudioEncodingBitRate(256_000)
