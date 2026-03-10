@@ -1,15 +1,17 @@
-﻿package com.upnp.fakeCall.ui.screens
+package com.upnp.fakeCall.ui.screens
 
 import android.text.format.DateFormat
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,29 +27,20 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EditCalendar
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -66,20 +60,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.upnp.fakeCall.CustomPreset
+import com.upnp.fakeCall.FakeCallUiState
 import com.upnp.fakeCall.FakeCallViewModel
 import com.upnp.fakeCall.ScheduleKind
+import com.upnp.fakeCall.ui.components.AnimatedIcon
+import com.upnp.fakeCall.ui.components.AudioPreviewCard
+import com.upnp.fakeCall.ui.components.CallerInputCard
+import com.upnp.fakeCall.ui.components.ExpressiveCardShape
+import com.upnp.fakeCall.ui.components.ExpressiveButton
+import com.upnp.fakeCall.ui.components.expressiveSpring
+import com.upnp.fakeCall.ui.components.TimingSelectionCard
+import com.upnp.fakeCall.ui.components.bounceClick
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import java.time.Instant
@@ -109,22 +110,51 @@ fun DashboardScreen(
     }
 
     val blurRadius by animateFloatAsState(
-        targetValue = if (showCustomSheet) 18f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy)
+        targetValue = if (showCustomSheet) 16f else 0f,
+        animationSpec = expressiveSpring(),
+        label = "backgroundBlur"
     )
 
     val backgroundScale by animateFloatAsState(
         targetValue = if (showCustomSheet) 0.98f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy)
+        animationSpec = expressiveSpring(),
+        label = "backgroundScale"
     )
 
     val canTrigger = state.hasRequiredPermissions && state.isProviderEnabled
-    val fabText = if (state.isTimerRunning) "Cancel Timer" else "Trigger Call"
+    val actionLabel = if (state.isTimerRunning) "Cancel Call" else "Schedule Call"
+    val is24Hour = DateFormat.is24HourFormat(context)
+
+    val actionContainerColor by animateColorAsState(
+        targetValue = if (state.isTimerRunning) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "actionContainer"
+    )
+
+    val actionContentColor by animateColorAsState(
+        targetValue = if (state.isTimerRunning) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onPrimary
+        },
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "actionContent"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
     ) {
         Box(
             modifier = Modifier
@@ -136,270 +166,229 @@ fun DashboardScreen(
                 .blur(blurRadius.dp)
         ) {
             Scaffold(
-                containerColor = Color.Transparent,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
                             Text(
                                 text = "FakeCall",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 text = "Schedule your perfect escape",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(
-                                Icons.Filled.Settings,
-                                contentDescription = "Open settings",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        AnimatedIcon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Open settings",
+                            shape = RoundedCornerShape(16.dp),
+                            backgroundColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            onClick = onOpenSettings
+                        )
                     }
                 },
-                floatingActionButton = {
-                    ExtendedFloatingActionButton(
+                bottomBar = {
+                    BottomActionBar(
+                        enabled = canTrigger || state.isTimerRunning,
+                        label = actionLabel,
+                        containerColor = actionContainerColor,
+                        contentColor = actionContentColor,
+                        isRinging = state.isTimerRunning,
                         onClick = {
                             if (canTrigger || state.isTimerRunning) {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.onTriggerOrCancelClicked()
                             }
-                        },
-                        shape = RoundedCornerShape(28.dp),
-                        containerColor = if (canTrigger || state.isTimerRunning) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        contentColor = if (canTrigger || state.isTimerRunning) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
                         }
-                    ) {
-                        Text(fabText)
-                    }
+                    )
                 }
             ) { innerPadding ->
-                Column(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(horizontal = 20.dp)
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-                        )
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                        .padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        top = 8.dp,
+                        bottom = 120.dp
+                    )
                 ) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    item {
+                        ScheduleStateCard(
+                            isTimerRunning = state.isTimerRunning,
+                            scheduleLabel = scheduleDisplay(state, is24Hour),
+                            scheduleSubtitle = scheduleSubtitle(state),
+                            runningLabel = runningScheduleLabel(state.timerEndsAtMillis)
+                        )
+                    }
 
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(28.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                    item {
+                        AnimatedVisibility(
+                            visible = state.isTimerRunning,
+                            enter = expandVertically(animationSpec = expressiveSpring()) + fadeIn(animationSpec = expressiveSpring()),
+                            exit = shrinkVertically(animationSpec = expressiveSpring()) + fadeOut(animationSpec = expressiveSpring())
                         ) {
-                            Text(
-                                text = "Caller",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                            OutlinedTextField(
-                                value = state.callerName,
-                                onValueChange = viewModel::onCallerNameChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Target Caller Name") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(24.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.callerNumber,
-                                onValueChange = viewModel::onCallerNumberChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Target Caller Number") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(24.dp)
+                            ScheduledBanner(
+                                runningLabel = runningScheduleLabel(state.timerEndsAtMillis)
                             )
                         }
                     }
 
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(32.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Text(
-                                text = "Schedule",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                    item {
+                        CallerInputCard(
+                            callerName = state.callerName,
+                            callerNumber = state.callerNumber,
+                            onCallerNameChange = viewModel::onCallerNameChange,
+                            onCallerNumberChange = viewModel::onCallerNumberChange
+                        )
+                    }
 
-                            val timeDisplay = scheduleDisplay(state, DateFormat.is24HourFormat(context))
-                            Text(
-                                text = timeDisplay,
-                                style = MaterialTheme.typography.displayMedium.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = (-1.2).sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    item {
+                        val manualLabel = when (state.scheduleKind) {
+                            ScheduleKind.PRESET -> "Set custom time"
+                            else -> scheduleDisplay(state, is24Hour)
+                        }
+                        val manualHelper = when (state.scheduleKind) {
+                            ScheduleKind.CUSTOM_EXACT -> "Exact time"
+                            ScheduleKind.CUSTOM_COUNTDOWN -> "Countdown timer"
+                            ScheduleKind.PRESET -> "Manual override"
+                        }
+                        TimingSelectionCard(
+                            scheduleTitle = scheduleDisplay(state, is24Hour),
+                            scheduleSubtitle = scheduleSubtitle(state),
+                            selectedDelaySeconds = if (state.scheduleKind == ScheduleKind.PRESET) {
+                                state.selectedDelaySeconds
+                            } else {
+                                -1
+                            },
+                            presetOptions = listOf(0, 10, 30, 60, 120, 300),
+                            onPresetSelected = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.onDelaySelected(it)
+                            },
+                            manualTimeLabel = manualLabel,
+                            manualTimeHelper = manualHelper,
+                            onOpenCustom = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                sheetMode = if (state.scheduleKind == ScheduleKind.CUSTOM_EXACT) {
+                                    ScheduleKind.CUSTOM_EXACT
+                                } else {
+                                    ScheduleKind.CUSTOM_COUNTDOWN
+                                }
+                                showCustomSheet = true
+                            },
+                            customPresets = state.customPresets,
+                            onCustomPresetSelected = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.onCustomPresetSelected(it)
+                            },
+                            onRemovePreset = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.removeCustomPreset(it)
+                            },
+                            formatPreset = { formatCustomPreset(it, is24Hour) }
+                        )
+                    }
 
-                            Text(
-                                text = scheduleSubtitle(state),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Row(
-                                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    item {
+                        if (!viewModel.canScheduleExactAlarms()) {
+                            Surface(
+                                tonalElevation = 1.dp,
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
                             ) {
-                                viewModel.delayOptionsSeconds.forEach { option ->
-                                    FilterChip(
-                                        selected = state.scheduleKind == ScheduleKind.PRESET && option == state.selectedDelaySeconds,
-                                        onClick = {
-                                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.onDelaySelected(option)
-                                        },
-                                        label = { Text(FakeCallViewModel.formatDelay(option)) },
-                                        shape = RoundedCornerShape(999.dp)
-                                    )
-                                }
-
-                                FilledTonalButton(
-                                    onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        sheetMode = if (state.scheduleKind == ScheduleKind.CUSTOM_EXACT) {
-                                            ScheduleKind.CUSTOM_EXACT
-                                        } else {
-                                            ScheduleKind.CUSTOM_COUNTDOWN
-                                        }
-                                        showCustomSheet = true
-                                    },
-                                    shape = RoundedCornerShape(999.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.EditCalendar,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Custom Call")
-                                }
-                            }
-
-                            if (state.customPresets.isNotEmpty()) {
-                                Text(
-                                    text = "Saved presets",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Row(
-                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    state.customPresets.forEach { preset ->
-                                        val label = formatCustomPreset(preset, DateFormat.is24HourFormat(context))
-                                        InputChip(
-                                            selected = false,
-                                            onClick = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                viewModel.onCustomPresetSelected(preset)
-                                            },
-                                            label = { Text(label) },
-                                            trailingIcon = {
-                                                IconButton(
-                                                    onClick = {
-                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                        viewModel.removeCustomPreset(preset)
-                                                    },
-                                                    modifier = Modifier.size(18.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Filled.Close,
-                                                        contentDescription = "Remove preset"
-                                                    )
-                                                }
-                                            },
-                                            shape = RoundedCornerShape(999.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (!viewModel.canScheduleExactAlarms()) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     Text(
                                         text = "Exact alarms are off.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.error
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
-                                    Button(onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        val intent = viewModel.openExactAlarmSettingsIntent()
-                                        runCatching { context.startActivity(intent) }
-                                    }) {
-                                        Text("Enable")
-                                    }
+                                    Text(
+                                        text = "Enable precise alarms to schedule exact-time calls.",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    ExpressiveButton(
+                                        label = "Enable precise alarms",
+                                        onClick = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            val intent = viewModel.openExactAlarmSettingsIntent()
+                                            runCatching { context.startActivity(intent) }
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                                        contentColor = MaterialTheme.colorScheme.errorContainer
+                                    )
                                 }
                             }
                         }
                     }
 
-                    if (state.isTimerRunning) {
-                        val runningLabel = runningScheduleLabel(state.timerEndsAtMillis)
-                        Text(
-                            text = "Countdown active • $runningLabel",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyLarge
+                    item {
+                        AudioPreviewCard(
+                            audioLabel = state.selectedAudioName.ifBlank { "Default" },
+                            audioUri = state.selectedAudioUri,
+                            onOpenSettings = onOpenSettings,
+                            onClearAudio = viewModel::clearAudioSelection
                         )
                     }
 
-                    if (state.statusMessage.isNotBlank()) {
-                        Text(
-                            text = state.statusMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    item {
+                        if (state.statusMessage.isNotBlank()) {
+                            Surface(
+                                tonalElevation = 1.dp,
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer
+                            ) {
+                                Text(
+                                    text = state.statusMessage,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        }
                     }
 
-                    if (!state.hasRequiredPermissions || !state.isProviderEnabled) {
-                        Text(
-                            text = "Go to Settings to grant permissions and enable provider.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                    item {
+                        if (!state.hasRequiredPermissions || !state.isProviderEnabled) {
+                            Surface(
+                                tonalElevation = 1.dp,
+                                shape = RoundedCornerShape(32.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    text = "Grant permissions and enable the provider in Settings.",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                 }
             }
         }
@@ -424,6 +413,168 @@ fun DashboardScreen(
             },
             onDismiss = { showCustomSheet = false }
         )
+    }
+}
+
+@Composable
+private fun ScheduleStateCard(
+    isTimerRunning: Boolean,
+    scheduleLabel: String,
+    scheduleSubtitle: String,
+    runningLabel: String
+) {
+    AnimatedContent(
+        targetState = isTimerRunning,
+        transitionSpec = {
+            fadeIn(animationSpec = expressiveSpring()) togetherWith fadeOut(animationSpec = expressiveSpring())
+        },
+        label = "scheduleState"
+    ) { running ->
+        Surface(
+            shape = ExpressiveCardShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 2.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedIcon(
+                    imageVector = if (running) Icons.Rounded.PhoneInTalk else Icons.Outlined.AccessTime,
+                    contentDescription = null,
+                    shape = CircleShape,
+                    backgroundColor = if (running) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    },
+                    tint = if (running) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    },
+                    isRinging = running,
+                    isActive = running
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (running) "Call scheduled" else "Ready to schedule",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (running) runningLabel else scheduleLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = scheduleSubtitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduledBanner(runningLabel: String) {
+    Surface(
+        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(32.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AnimatedIcon(
+                imageVector = Icons.Rounded.Phone,
+                contentDescription = null,
+                shape = CircleShape,
+                backgroundColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                tint = MaterialTheme.colorScheme.primary,
+                isRinging = true,
+                isActive = true
+            )
+            Column {
+                Text(
+                    text = "Call scheduled",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = runningLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomActionBar(
+    enabled: Boolean,
+    label: String,
+    containerColor: androidx.compose.ui.graphics.Color,
+    contentColor: androidx.compose.ui.graphics.Color,
+    isRinging: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .bounceClick(enabled = enabled, onClick = onClick),
+            color = containerColor.copy(alpha = if (enabled) 0.96f else 0.6f),
+            contentColor = contentColor,
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 4.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                AnimatedIcon(
+                    imageVector = Icons.Rounded.Phone,
+                    contentDescription = null,
+                    shape = CircleShape,
+                    backgroundColor = contentColor.copy(alpha = 0.18f),
+                    tint = contentColor,
+                    isRinging = isRinging,
+                    isActive = isRinging
+                )
+                AnimatedContent(
+                    targetState = label,
+                    transitionSpec = {
+                        fadeIn(animationSpec = expressiveSpring()) togetherWith fadeOut(animationSpec = expressiveSpring())
+                    },
+                    label = "actionLabel"
+                ) { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = contentColor
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -462,7 +613,8 @@ private fun CustomCallSheet(
 
     val progress by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy)
+        animationSpec = expressiveSpring(),
+        label = "sheetProgress"
     )
 
     if (visible || progress > 0f) {
@@ -475,13 +627,13 @@ private fun CustomCallSheet(
         Box(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
-                exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow))
+                enter = fadeIn(animationSpec = expressiveSpring()),
+                exit = fadeOut(animationSpec = expressiveSpring())
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha))
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = scrimAlpha))
                         .padding(bottom = 1.dp)
                 )
             }
@@ -496,9 +648,8 @@ private fun CustomCallSheet(
                         scaleX = scale
                         scaleY = scale
                         this.alpha = alpha
-                    }
-                    .shadow(12.dp, RoundedCornerShape(cornerRadius)),
-                color = MaterialTheme.colorScheme.surface,
+                    },
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 6.dp,
                 shape = RoundedCornerShape(cornerRadius)
             ) {
@@ -512,13 +663,16 @@ private fun CustomCallSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.AccessTime,
-                            contentDescription = null
+                        AnimatedIcon(
+                            imageVector = Icons.Outlined.AccessTime,
+                            contentDescription = null,
+                            shape = CircleShape,
+                            backgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
                             text = "Custom Call",
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -526,23 +680,25 @@ private fun CustomCallSheet(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        FilterChip(
+                        androidx.compose.material3.FilterChip(
                             selected = scheduleKind == ScheduleKind.CUSTOM_COUNTDOWN,
                             onClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onScheduleKindChange(ScheduleKind.CUSTOM_COUNTDOWN)
                             },
                             label = { Text("Countdown") },
-                            shape = RoundedCornerShape(999.dp)
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier.bounceClick()
                         )
-                        FilterChip(
+                        androidx.compose.material3.FilterChip(
                             selected = scheduleKind == ScheduleKind.CUSTOM_EXACT,
                             onClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onScheduleKindChange(ScheduleKind.CUSTOM_EXACT)
                             },
                             label = { Text("Exact Time") },
-                            shape = RoundedCornerShape(999.dp)
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier.bounceClick()
                         )
                     }
 
@@ -562,21 +718,29 @@ private fun CustomCallSheet(
                         )
                     }
 
-                    FilledTonalButton(onClick = onSavePreset) {
-                        Text("Save as preset")
-                    }
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        FilledTonalButton(onClick = onDismiss) {
+                        Button(
+                            onClick = onSavePreset,
+                            modifier = Modifier.weight(1f).bounceClick()
+                        ) {
+                            Text("Save as preset")
+                        }
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f).bounceClick()
+                        ) {
                             Text("Cancel")
                         }
-                        Button(onClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onApply()
-                        }) {
+                        Button(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onApply()
+                            },
+                            modifier = Modifier.weight(1f).bounceClick()
+                        ) {
                             Text("Use this time")
                         }
                     }
@@ -592,11 +756,14 @@ private fun CountdownPicker(
     seconds: Int,
     onChange: (Int, Int) -> Unit
 ) {
+    val currentMinutes by rememberUpdatedState(minutes)
+    val currentSeconds by rememberUpdatedState(seconds)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(vertical = 16.dp, horizontal = 12.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
@@ -606,7 +773,7 @@ private fun CountdownPicker(
             value = minutes,
             range = 0..59,
             onValueChange = {
-                onChange(it, seconds)
+                onChange(it, currentSeconds)
             }
         )
         Text(
@@ -619,7 +786,7 @@ private fun CountdownPicker(
             value = seconds,
             range = 0..59,
             onValueChange = {
-                onChange(minutes, it)
+                onChange(currentMinutes, it)
             }
         )
     }
@@ -633,35 +800,81 @@ private fun ExactTimePicker(
     is24Hour: Boolean,
     onChange: (Int, Int) -> Unit
 ) {
-    val haptics = LocalHapticFeedback.current
-    val timePickerState = rememberTimePickerState(
-        initialHour = hour,
-        initialMinute = minute,
-        is24Hour = is24Hour
-    )
-
-    LaunchedEffect(timePickerState, hour, minute) {
-        snapshotFlow { timePickerState.hour to timePickerState.minute }
-            .collect { (newHour, newMinute) ->
-                if (newHour != hour || newMinute != minute) {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onChange(newHour, newMinute)
-                }
-            }
-    }
+    var showDialog by remember { mutableStateOf(false) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .bounceClick(onClick = { showDialog = true }),
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            TimePicker(state = timePickerState)
+            AnimatedIcon(
+                imageVector = Icons.Outlined.AccessTime,
+                contentDescription = null,
+                shape = CircleShape,
+                backgroundColor = MaterialTheme.colorScheme.secondaryContainer,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = formatExactTime(hour, minute, is24Hour),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "Tap to edit exact time",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    if (showDialog) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = hour,
+            initialMinute = minute,
+            is24Hour = is24Hour
+        )
+        Dialog(onDismissRequest = { showDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(36.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Pick exact time",
+                        style = MaterialTheme.typography.displaySmall
+                    )
+                    TimePicker(state = timePickerState)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Button(onClick = { showDialog = false }, modifier = Modifier.bounceClick()) {
+                            Text("Cancel")
+                        }
+                        Button(onClick = {
+                            onChange(timePickerState.hour, timePickerState.minute)
+                            showDialog = false
+                        }, modifier = Modifier.bounceClick()) {
+                            Text("Apply")
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -769,7 +982,7 @@ private fun rememberPickerState(initialIndex: Int): PickerState {
     }
 }
 
-private fun scheduleDisplay(state: com.upnp.fakeCall.FakeCallUiState, is24Hour: Boolean): String {
+private fun scheduleDisplay(state: FakeCallUiState, is24Hour: Boolean): String {
     return when (state.scheduleKind) {
         ScheduleKind.CUSTOM_EXACT -> formatExactTime(state.customExactHour, state.customExactMinute, is24Hour)
         ScheduleKind.CUSTOM_COUNTDOWN -> FakeCallViewModel.formatDelay(
@@ -779,7 +992,7 @@ private fun scheduleDisplay(state: com.upnp.fakeCall.FakeCallUiState, is24Hour: 
     }
 }
 
-private fun scheduleSubtitle(state: com.upnp.fakeCall.FakeCallUiState): String {
+private fun scheduleSubtitle(state: FakeCallUiState): String {
     return when (state.scheduleKind) {
         ScheduleKind.CUSTOM_EXACT -> "Exact time"
         ScheduleKind.CUSTOM_COUNTDOWN -> "Countdown timer"

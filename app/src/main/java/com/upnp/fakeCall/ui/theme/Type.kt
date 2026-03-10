@@ -24,6 +24,13 @@ val Typography = Typography(
         lineHeight = 46.sp,
         letterSpacing = (-0.8).sp
     ),
+    displaySmall = TextStyle(
+        fontFamily = DisplayFont,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
+        letterSpacing = (-0.4).sp
+    ),
     headlineMedium = TextStyle(
         fontFamily = DisplayFont,
         fontWeight = FontWeight.SemiBold,
@@ -59,7 +66,8 @@ val Typography = Typography(
         fontFamily = BodyFont,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
-        lineHeight = 18.sp
+        lineHeight = 19.sp,
+        letterSpacing = 0.4.sp
     ),
     labelMedium = TextStyle(
         fontFamily = BodyFont,
