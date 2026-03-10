@@ -21,6 +21,8 @@ import android.telecom.PhoneAccount
 import android.telecom.TelecomManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.upnp.fakeCall.ivr.IvrConfigStore
+import com.upnp.fakeCall.ivr.IvrStateMachine
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,6 +40,9 @@ class FakeConnection(
     private var recordingTempFile: File? = null
     private var recordingDestination: RecordingDestination? = null
     private val audioManager: AudioManager = context.getSystemService(AudioManager::class.java)
+    private val ivrStore = IvrConfigStore()
+    private var ivrStateMachine: IvrStateMachine? = null
+    private var ivrAudioAttributes: AudioAttributes? = null
 
     init {
         val displayName = callerName.ifBlank { callerNumber }
@@ -83,6 +88,20 @@ class FakeConnection(
         }
     }
 
+    override fun onPlayDtmfTone(c: Char) {
+        super.onPlayDtmfTone(c)
+        val machine = ivrStateMachine ?: return
+        val next = machine.handleDtmf(c) ?: return
+        val uriString = next.audioUri
+        if (uriString.isBlank()) {
+            stopAndReleasePlayer()
+            return
+        }
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return
+        val attrs = ivrAudioAttributes ?: buildVoiceAudioAttributes()
+        switchToAudio(uri, attrs)
+    }
+
     private fun disconnectWithCause(code: Int) {
         stopAndReleasePlayer()
         stopAndReleaseRecording()
@@ -99,10 +118,22 @@ class FakeConnection(
 
         requestAudioFocus()
 
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
+        val audioAttributes = buildVoiceAudioAttributes()
+        ivrAudioAttributes = audioAttributes
+
+        val ivrConfig = ivrStore.load(context)
+        ivrStateMachine = ivrConfig?.let { IvrStateMachine(it) }
+
+        val ivrAudio = ivrStateMachine
+            ?.currentNode()
+            ?.audioUri
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+
+        if (ivrAudio != null) {
+            val started = startPlayerFromUri(ivrAudio, audioAttributes)
+            if (started) return
+        }
 
         val selectedUri = loadSelectedAudioUri()
         if (selectedUri == null) {
@@ -178,6 +209,18 @@ class FakeConnection(
             Log.e(TAG, "MediaPlayer setup failed for uri=$uri", it)
             false
         }
+    }
+
+    private fun switchToAudio(uri: Uri, audioAttributes: AudioAttributes) {
+        stopAndReleasePlayer()
+        startPlayerFromUri(uri, audioAttributes)
+    }
+
+    private fun buildVoiceAudioAttributes(): AudioAttributes {
+        return AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
     }
 
     private fun buildInternalRecordingFile(filename: String): File {

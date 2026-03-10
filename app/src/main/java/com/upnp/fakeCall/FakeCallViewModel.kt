@@ -10,6 +10,9 @@ import android.provider.Settings
 import android.telecom.TelecomManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.upnp.fakeCall.ivr.IvrConfig
+import com.upnp.fakeCall.ivr.IvrConfigStore
+import com.upnp.fakeCall.ivr.IvrNode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +24,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 enum class ScheduleKind {
     PRESET,
@@ -47,6 +51,7 @@ data class FakeCallUiState(
     val customExactHour: Int = 14,
     val customExactMinute: Int = 45,
     val customPresets: List<CustomPreset> = emptyList(),
+    val ivrConfig: IvrConfig? = null,
     val selectedAudioUri: String = "",
     val selectedAudioName: String = "Default",
     val hasRequiredPermissions: Boolean = false,
@@ -62,6 +67,7 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
 
     private val telecomHelper = TelecomHelper(application)
     private val prefs = application.getSharedPreferences(PREFS_NAME, 0)
+    private val ivrStore = IvrConfigStore()
 
     private val _uiState = MutableStateFlow(
         FakeCallUiState(
@@ -79,6 +85,7 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
             customExactHour = prefs.getInt(KEY_CUSTOM_EXACT_HOUR, 14),
             customExactMinute = prefs.getInt(KEY_CUSTOM_EXACT_MINUTE, 45),
             customPresets = parseCustomPresets(prefs.getString(KEY_CUSTOM_PRESETS, "").orEmpty()),
+            ivrConfig = ivrStore.load(application),
             selectedAudioUri = prefs.getString(KEY_AUDIO_URI, "").orEmpty(),
             selectedAudioName = prefs.getString(KEY_AUDIO_NAME, "Default").orEmpty(),
             timerEndsAtMillis = prefs.getLong(KEY_TIMER_ENDS_AT, 0L),
@@ -251,13 +258,7 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
             resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        val displayName = runCatching {
-            resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { cursor ->
-                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-                }
-        }.getOrNull() ?: fallbackNameFromUri(uri)
+        val displayName = resolveDisplayName(uri)
 
         prefs.edit()
             .putString(KEY_AUDIO_URI, uri.toString())
@@ -296,6 +297,126 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
                 isRecordingEnabled = enabled,
                 statusMessage = if (enabled) "Call recording enabled." else "Call recording disabled."
             )
+        }
+    }
+
+    fun addIvrNode(title: String) {
+        val safeTitle = title.trim().ifBlank { "Menu" }
+        updateIvrConfig { config ->
+            val id = UUID.randomUUID().toString()
+            val node = IvrNode(id = id, title = safeTitle)
+            val nodes = config?.nodes?.toMutableMap() ?: mutableMapOf()
+            nodes[id] = node
+            val root = config?.rootId ?: id
+            IvrConfig(rootId = root, nodes = nodes)
+        }
+    }
+
+    fun setIvrRoot(nodeId: String) {
+        updateIvrConfig { config ->
+            val nodes = config?.nodes ?: return@updateIvrConfig config
+            if (!nodes.containsKey(nodeId)) return@updateIvrConfig config
+            config.copy(rootId = nodeId)
+        }
+    }
+
+    fun removeIvrNode(nodeId: String) {
+        updateIvrConfig { config ->
+            val current = config ?: return@updateIvrConfig null
+            if (!current.nodes.containsKey(nodeId)) return@updateIvrConfig current
+
+            val remaining = current.nodes.toMutableMap().apply { remove(nodeId) }
+            val cleaned = remaining.mapValues { (_, node) ->
+                node.copy(routes = node.routes.filterValues { it != nodeId })
+            }
+
+            val newRoot = if (current.rootId == nodeId) {
+                cleaned.keys.firstOrNull().orEmpty()
+            } else {
+                current.rootId
+            }
+
+            if (cleaned.isEmpty() || newRoot.isBlank()) null else IvrConfig(newRoot, cleaned)
+        }
+    }
+
+    fun onIvrNodeAudioSelected(nodeId: String, uri: Uri?) {
+        if (uri == null) return
+        val app = getApplication<Application>()
+        val resolver = app.contentResolver
+
+        runCatching {
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        val label = resolveDisplayName(uri)
+
+        updateIvrConfig { config ->
+            val current = config ?: return@updateIvrConfig config
+            val node = current.nodes[nodeId] ?: return@updateIvrConfig current
+            val updated = node.copy(audioUri = uri.toString(), audioLabel = label)
+            val nodes = current.nodes.toMutableMap().apply { put(nodeId, updated) }
+            current.copy(nodes = nodes)
+        }
+    }
+
+    fun clearIvrNodeAudio(nodeId: String) {
+        updateIvrConfig { config ->
+            val current = config ?: return@updateIvrConfig config
+            val node = current.nodes[nodeId] ?: return@updateIvrConfig current
+            val updated = node.copy(audioUri = "", audioLabel = "")
+            val nodes = current.nodes.toMutableMap().apply { put(nodeId, updated) }
+            current.copy(nodes = nodes)
+        }
+    }
+
+    fun addIvrRoute(parentId: String, digit: Char, childId: String) {
+        if (digit == '0') return
+        updateIvrConfig { config ->
+            val current = config ?: return@updateIvrConfig config
+            val parent = current.nodes[parentId] ?: return@updateIvrConfig current
+            if (!current.nodes.containsKey(childId)) return@updateIvrConfig current
+            val updated = parent.copy(routes = parent.routes.toMutableMap().apply { put(digit, childId) })
+            val nodes = current.nodes.toMutableMap().apply { put(parentId, updated) }
+            current.copy(nodes = nodes)
+        }
+    }
+
+    fun removeIvrRoute(parentId: String, digit: Char) {
+        updateIvrConfig { config ->
+            val current = config ?: return@updateIvrConfig config
+            val parent = current.nodes[parentId] ?: return@updateIvrConfig current
+            if (!parent.routes.containsKey(digit)) return@updateIvrConfig current
+            val updated = parent.copy(routes = parent.routes.toMutableMap().apply { remove(digit) })
+            val nodes = current.nodes.toMutableMap().apply { put(parentId, updated) }
+            current.copy(nodes = nodes)
+        }
+    }
+
+    fun exportIvrConfig(uri: Uri?) {
+        if (uri == null) return
+        val config = uiState.value.ivrConfig ?: return
+        val xml = ivrStore.serialize(config)
+        runCatching {
+            getApplication<Application>().contentResolver.openOutputStream(uri, "w")?.use { out ->
+                out.write(xml.toByteArray())
+            }
+            _uiState.update { it.copy(statusMessage = "Mailbox exported.") }
+        }.onFailure {
+            _uiState.update { it.copy(statusMessage = "Export failed.") }
+        }
+    }
+
+    fun importIvrConfig(uri: Uri?) {
+        if (uri == null) return
+        val resolver = getApplication<Application>().contentResolver
+        runCatching {
+            val xml = resolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val parsed = ivrStore.parse(xml) ?: error("Invalid IVR config")
+            ivrStore.save(getApplication(), parsed)
+            _uiState.update { it.copy(ivrConfig = parsed, statusMessage = "Mailbox imported.") }
+        }.onFailure {
+            _uiState.update { it.copy(statusMessage = "Import failed.") }
         }
     }
 
@@ -532,6 +653,12 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(isProviderEnabled = enabled) }
     }
 
+    private fun updateIvrConfig(transform: (IvrConfig?) -> IvrConfig?) {
+        val updated = transform(uiState.value.ivrConfig)
+        ivrStore.save(getApplication(), updated)
+        _uiState.update { it.copy(ivrConfig = updated) }
+    }
+
     private fun customCountdownSeconds(state: FakeCallUiState): Int {
         val minutes = state.customCountdownMinutes.coerceAtLeast(0)
         val seconds = state.customCountdownSeconds.coerceAtLeast(0)
@@ -615,6 +742,18 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
         }.also {
             runCatching { retriever.release() }
         }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String {
+        val resolver = getApplication<Application>().contentResolver
+        val displayName = runCatching {
+            resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+                }
+        }.getOrNull()
+        return displayName ?: fallbackNameFromUri(uri)
     }
 
     private fun readableTreeLabel(uri: Uri): String {
