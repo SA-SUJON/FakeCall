@@ -63,6 +63,8 @@ class FakeConnection(
             // Start on earpiece, but allow system UI to switch routes afterward.
             setAudioRoute(CallAudioState.ROUTE_EARPIECE)
             audioManager.isSpeakerphoneOn = false
+            runCatching { audioManager.stopBluetoothSco() }
+            runCatching { audioManager.isBluetoothScoOn = false }
         }
         startVoicePlayback()
         maybeStartMicRecording()
@@ -88,8 +90,34 @@ class FakeConnection(
         }
         runCatching {
             // Respect the system route (earpiece vs. speaker) so the phone app toggle works.
-            audioManager.isSpeakerphoneOn = state.route == CallAudioState.ROUTE_SPEAKER
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            applyAudioRoute(state.route)
+        }
+    }
+
+    private fun applyAudioRoute(route: Int) {
+        when {
+            route and CallAudioState.ROUTE_BLUETOOTH != 0 -> {
+                audioManager.isSpeakerphoneOn = false
+                runCatching { audioManager.startBluetoothSco() }
+                runCatching { audioManager.isBluetoothScoOn = true }
+            }
+            route and CallAudioState.ROUTE_WIRED_HEADSET != 0 -> {
+                audioManager.isSpeakerphoneOn = false
+                runCatching { audioManager.stopBluetoothSco() }
+                runCatching { audioManager.isBluetoothScoOn = false }
+            }
+            route and CallAudioState.ROUTE_SPEAKER != 0 -> {
+                runCatching { audioManager.stopBluetoothSco() }
+                runCatching { audioManager.isBluetoothScoOn = false }
+                audioManager.isSpeakerphoneOn = true
+            }
+            else -> {
+                // Default to earpiece.
+                runCatching { audioManager.stopBluetoothSco() }
+                runCatching { audioManager.isBluetoothScoOn = false }
+                audioManager.isSpeakerphoneOn = false
+            }
         }
     }
 
