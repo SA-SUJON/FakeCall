@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://github.com/DDOneApps/FakeCall/app/src/main/res/drawable/ic_launcher_foreground.xml" width=20% title="logo" />
+<img src="https://github.com/user-attachments/assets/c36243df-659f-4ac5-8c63-a1344e8b876a" width=20% title="logo" />
 
 <p>
 
@@ -15,12 +15,11 @@
 **An open-source Android application to simulate incoming calls, featuring a modern Material 3 UI with dynamic Monet support.**
 
 
-Fork: added call recording and made audio hd
 </div>
 
 ## Overview
-
-This is my Fake Call application. Unlike other apps that merely mock a UI, this app integrates directly with the Android Telecom Framework to provide an indistinguishable calling experience. It has many features to make the call as real as possible.
+Ever wanted to get [that Feature of old Samsung phones](https://www.youtube.com/watch?v=OKV3Eei5JNE) to simulate an incoming call with audio on the originial phone app?
+Introducing FakeCall. Unlike other apps that merely mock a UI, this app integrates directly with the Android Telecom Framework to provide an indistinguishable calling experience. It has many features to make the call as real as possible.
 
 <p align=center>
   
@@ -29,9 +28,12 @@ This is my Fake Call application. Unlike other apps that merely mock a UI, this 
 </p>
 
 -  **Original Dialer:** FakeCall uses your real Phone app to simulate the incoming Call by creating [a Phone Account in android's TelecomManager](https://developer.android.com/reference/android/telecom/TelecomManager)
--  **Customizable:** The app lets you customize the name of the fake phone account in the settings to match your real service provider
+-  **Customizable:** The app lets you customize the name of the fake phone account in the settings to match your real service provider.
+-  **Schedule:** Set exact Timers for when the call should come in
 -  **Audio Support:** You can upload audio files that play when the call is answered
 -  **Call History:** Simulated calls are being shown in call history
+-  **IVR Mode:** assign audio files to keys and make sub-menus
+-  **Recording:** record microphone audio of a Fake call
 
 ## Screenshots
 
