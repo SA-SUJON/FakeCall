@@ -17,6 +17,9 @@ jobs:
           https://api.crowdin.com/api/v2/projects/fakecall/languages/progress \
           > progress.json
 
+      - name: Show progress.json
+        run: cat progress.json
+
       - name: Prozent berechnen + Badge erstellen
         run: |
           percent=$(jq '[.data[].data.translationProgress] | add / length' progress.json)
