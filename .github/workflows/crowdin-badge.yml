@@ -14,7 +14,7 @@ jobs:
       - name: Crowdin Fortschritt holen
         run: |
           curl -s -H "Authorization: Bearer ${{ secrets.CROWDIN_API_TOKEN }}" \
-          https://api.crowdin.com/api/v2/projects/fakecall/languages/progress \
+          https://api.crowdin.com/api/v2/projects/883718/languages/progress \
           > progress.json
 
       - name: Show progress.json
