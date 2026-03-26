@@ -1,4 +1,5 @@
 name: Update Crowdin Badge
+
 on:
   workflow_dispatch:
   schedule:
@@ -10,17 +11,34 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - run: curl -s -H "Authorization: Bearer ${{ secrets.CROWDIN_API_TOKEN }}" https://api.crowdin.com/api/v2/projects/fakecall/languages/progress > progress.json
+      - name: Crowdin Fortschritt holen
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.CROWDIN_API_TOKEN }}" \
+          https://api.crowdin.com/api/v2/projects/fakecall/languages/progress \
+          > progress.json
 
-      - run: |
+      - name: Prozent berechnen + Badge erstellen
+        run: |
           percent=$(jq '[.data[].data.translationProgress] | add / length' progress.json)
           percent_rounded=$(printf "%.0f" $percent)
-          if [ "$percent_rounded" -lt 50 ]; then color="red";
-          elif [ "$percent_rounded" -lt 80 ]; then color="yellow";
-          else color="brightgreen"; fi
-          echo "{\"schemaVersion\":1,\"label\":\"translation\",\"message\":\"${percent_rounded}%\",\"color\":\"$color\"}" > badge.json
+          if [ "$percent_rounded" -lt 50 ]; then
+            color="red"
+          elif [ "$percent_rounded" -lt 80 ]; then
+            color="yellow"
+          else
+            color="brightgreen"
+          fi
+          cat <<EOF > badge.json
+          {
+            "schemaVersion": 1,
+            "label": "translation",
+            "message": "${percent_rounded}%",
+            "color": "$color"
+          }
+          EOF
 
-      - run: |
+      - name: Commit & Push
+        run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add badge.json
