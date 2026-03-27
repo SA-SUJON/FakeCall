@@ -33,12 +33,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -161,7 +163,14 @@ fun FakeCallApp(
                 composable(route = ROUTE_SETTINGS) {
                     SettingsScreen(
                         viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
+                        onBack = {
+                            if (!navController.popBackStack()) {
+                                navController.navigate(ROUTE_DASHBOARD) {
+                                    popUpTo(ROUTE_SETTINGS) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        },
                         onRequestPermissions = { permissionLauncher.launch(RequiredPermissions) }
                     )
                 }
@@ -217,10 +226,10 @@ private fun UpdateBanner(
                 modifier = Modifier.size(34.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.label_version_prefix),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
@@ -230,7 +239,13 @@ private fun UpdateBanner(
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onDownload) {
+            FilledTonalButton(
+                onClick = onDownload,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
                 Text(stringResource(R.string.action_download))
             }
             IconButton(onClick = onDismiss) {

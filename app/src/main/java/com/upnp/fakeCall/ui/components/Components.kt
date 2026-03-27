@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -53,6 +54,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -208,6 +210,7 @@ fun ExpressiveButton(
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
     enabled: Boolean = true,
+    maxLines: Int = 2,
     containerColor: Color = MaterialTheme.colorScheme.primary,
     contentColor: Color = MaterialTheme.colorScheme.onPrimary,
     shape: Shape = RoundedCornerShape(24.dp)
@@ -239,7 +242,9 @@ fun ExpressiveButton(
             }
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = maxLines,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -501,55 +506,111 @@ fun AudioPreviewCard(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ExpressiveButton(
-                label = if (isPlaying) stringResource(R.string.action_stop) else stringResource(R.string.action_play),
-                onClick = {
-                    if (audioUri.isBlank()) return@ExpressiveButton
-                    if (isPlaying) {
-                        stopPlayback()
-                    } else {
-                        val uri = runCatching { Uri.parse(audioUri) }.getOrNull() ?: return@ExpressiveButton
-                        val newPlayer = MediaPlayer().apply {
-                            setDataSource(context, uri)
-                            prepare()
-                            start()
-                            setOnCompletionListener {
-                                isPlaying = false
-                                runCatching { release() }
-                                player = null
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val useVerticalButtons = maxWidth < 460.dp
+            if (useVerticalButtons) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ExpressiveButton(
+                        label = if (isPlaying) stringResource(R.string.action_stop) else stringResource(R.string.action_play),
+                        onClick = {
+                            if (audioUri.isBlank()) return@ExpressiveButton
+                            if (isPlaying) {
+                                stopPlayback()
+                            } else {
+                                val uri = runCatching { Uri.parse(audioUri) }.getOrNull() ?: return@ExpressiveButton
+                                val newPlayer = MediaPlayer().apply {
+                                    setDataSource(context, uri)
+                                    prepare()
+                                    start()
+                                    setOnCompletionListener {
+                                        isPlaying = false
+                                        runCatching { release() }
+                                        player = null
+                                    }
+                                }
+                                player = newPlayer
+                                isPlaying = true
                             }
-                        }
-                        player = newPlayer
-                        isPlaying = true
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                leadingIcon = if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
-                enabled = audioUri.isNotBlank(),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            ExpressiveButton(
-                label = stringResource(R.string.action_open_settings),
-                onClick = onOpenSettings,
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            ExpressiveButton(
-                label = stringResource(R.string.action_clear_audio),
-                onClick = {
-                    stopPlayback()
-                    onClearAudio()
-                },
-                modifier = Modifier.weight(1f),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
+                        enabled = audioUri.isNotBlank(),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    ExpressiveButton(
+                        label = stringResource(R.string.action_open_settings),
+                        onClick = onOpenSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    ExpressiveButton(
+                        label = stringResource(R.string.action_clear_audio),
+                        onClick = {
+                            stopPlayback()
+                            onClearAudio()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ExpressiveButton(
+                        label = if (isPlaying) stringResource(R.string.action_stop) else stringResource(R.string.action_play),
+                        onClick = {
+                            if (audioUri.isBlank()) return@ExpressiveButton
+                            if (isPlaying) {
+                                stopPlayback()
+                            } else {
+                                val uri = runCatching { Uri.parse(audioUri) }.getOrNull() ?: return@ExpressiveButton
+                                val newPlayer = MediaPlayer().apply {
+                                    setDataSource(context, uri)
+                                    prepare()
+                                    start()
+                                    setOnCompletionListener {
+                                        isPlaying = false
+                                        runCatching { release() }
+                                        player = null
+                                    }
+                                }
+                                player = newPlayer
+                                isPlaying = true
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        leadingIcon = if (isPlaying) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
+                        enabled = audioUri.isNotBlank(),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    ExpressiveButton(
+                        label = stringResource(R.string.action_open_settings),
+                        onClick = onOpenSettings,
+                        modifier = Modifier.weight(1f),
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    ExpressiveButton(
+                        label = stringResource(R.string.action_clear_audio),
+                        onClick = {
+                            stopPlayback()
+                            onClearAudio()
+                        },
+                        modifier = Modifier.weight(1f),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }
