@@ -172,12 +172,15 @@ Read it [Here](https://raw.githubusercontent.com/DDOneApps/FakeCall/refs/heads/m
 
 ---
 
-<div align="center">
-**☕️ If you want to support me, you can do it via monero:
-  ´42eQ1sZtR1USUcGRwc4hiTLNvL7q8U9XSCVVtuhRFKKREpevd4F1X3aN8X4UzkqNTy3n4BsfUooLvj1ydjpem5Ee9SRA2dZ´
+
+**☕️ If you want to support me, you can do it via monero:**
+`42eQ1sZtR1USUcGRwc4hiTLNvL7q8U9XSCVVtuhRFKKREpevd4F1X3aN8X4UzkqNTy3n4BsfUooLvj1ydjpem5Ee9SRA2dZ`
+![9a569a26-b6f7-4425-84b6-0584a914ae54](https://github.com/user-attachments/assets/10f6a5b6-bf4c-43c1-8929-21e7cc3951e2)
+
+
 **⭐ Star this repo if you find it helpful!**
 
 Made with ❤️(and AI 🤖)
 
-</div>
+
 
