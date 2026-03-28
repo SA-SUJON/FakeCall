@@ -173,7 +173,8 @@ Read it [Here](https://raw.githubusercontent.com/DDOneApps/FakeCall/refs/heads/m
 ---
 
 <div align="center">
-
+**☕️ If you want to support me, you can do it via monero:
+  ´42eQ1sZtR1USUcGRwc4hiTLNvL7q8U9XSCVVtuhRFKKREpevd4F1X3aN8X4UzkqNTy3n4BsfUooLvj1ydjpem5Ee9SRA2dZ´
 **⭐ Star this repo if you find it helpful!**
 
 Made with ❤️(and AI 🤖)
