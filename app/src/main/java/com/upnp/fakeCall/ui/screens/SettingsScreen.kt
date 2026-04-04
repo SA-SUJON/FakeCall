@@ -72,8 +72,11 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -144,6 +147,11 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         viewModel.onRecordingFolderSelected(uri)
+    }
+    val mp3IvrFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        viewModel.onMp3IvrFolderSelected(uri)
     }
 
     val ivrAudioPicker = rememberLauncherForActivityResult(
@@ -614,54 +622,115 @@ fun SettingsScreen(
                     }
                     item {
                         PreferenceCard(
-                            icon = Icons.Outlined.Folder,
-                            title = stringResource(R.string.settings_import_mailbox_title),
-                            subtitle = stringResource(R.string.settings_import_mailbox_subtitle),
-                            onClick = { ivrImportLauncher.launch(arrayOf("text/xml", "application/xml")) }
-                        )
+                            icon = Icons.Outlined.MusicNote,
+                            title = stringResource(R.string.settings_ivr_mode_title),
+                            subtitle = stringResource(R.string.settings_ivr_mode_subtitle),
+                            onClick = null,
+                            trailingContent = null
+                        ) {
+                            SingleChoiceSegmentedButtonRow(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                SegmentedButton(
+                                    selected = !state.isMp3IvrModeEnabled,
+                                    onClick = { viewModel.onMp3IvrModeEnabledChange(false) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    modifier = Modifier.bounceClick()
+                                ) {
+                                    Text(stringResource(R.string.settings_ivr_mode_custom))
+                                }
+                                SegmentedButton(
+                                    selected = state.isMp3IvrModeEnabled,
+                                    onClick = { viewModel.onMp3IvrModeEnabledChange(true) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    modifier = Modifier.bounceClick()
+                                ) {
+                                    Text(stringResource(R.string.settings_ivr_mode_mp3))
+                                }
+                            }
+                        }
                     }
-                    item {
-                        PreferenceCard(
-                            icon = Icons.Outlined.Refresh,
-                            title = stringResource(R.string.settings_export_mailbox_title),
-                            subtitle = stringResource(R.string.settings_export_mailbox_subtitle),
-                            onClick = { ivrExportLauncher.launch("fakecall_mailbox.xml") }
-                        )
-                    }
-                    item {
-                        PreferenceCard(
-                            icon = Icons.Outlined.Add,
-                            title = stringResource(R.string.settings_add_node_title),
-                            subtitle = stringResource(R.string.settings_add_node_subtitle),
-                            onClick = { showAddNodeDialog = true }
-                        )
-                    }
-
-                    if (ivrNodes.isEmpty()) {
+                    if (state.isMp3IvrModeEnabled) {
                         item {
-                            Text(
-                                text = stringResource(R.string.settings_no_mailbox_nodes),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            PreferenceCard(
+                                icon = Icons.Outlined.MusicNote,
+                                title = stringResource(R.string.settings_mp3_ivr_mode_title),
+                                subtitle = stringResource(R.string.settings_mp3_ivr_mode_subtitle),
+                                onClick = null,
+                                trailingContent = null
+                            )
+                        }
+                        item {
+                            PreferenceCard(
+                                icon = Icons.Outlined.Folder,
+                                title = stringResource(R.string.settings_mp3_ivr_folder_title),
+                                subtitle = stringResource(
+                                    R.string.settings_mp3_ivr_folder_subtitle,
+                                    state.mp3IvrFolderName
+                                ),
+                                onClick = { mp3IvrFolderLauncher.launch(null) }
+                            )
+                        }
+                        item {
+                            PreferenceCard(
+                                icon = Icons.Outlined.Close,
+                                title = stringResource(R.string.settings_mp3_ivr_clear_folder_title),
+                                subtitle = stringResource(R.string.settings_mp3_ivr_clear_folder_subtitle),
+                                onClick = viewModel::clearMp3IvrFolderSelection
                             )
                         }
                     } else {
-                        items(ivrNodes) { node ->
-                            MailboxNodeCard(
-                                node = node,
-                                nodes = ivrNodes,
-                                isRoot = ivrConfig?.rootId == node.id,
-                                onSetRoot = { viewModel.setIvrRoot(node.id) },
-                                onSelectAudio = {
-                                    pendingAudioNodeId = node.id
-                                    ivrAudioPicker.launch(arrayOf("audio/*"))
-                                },
-                                onClearAudio = { viewModel.clearIvrNodeAudio(node.id) },
-                                onAddMapping = { mappingNodeId = node.id },
-                                onRemoveMapping = { digit -> viewModel.removeIvrRoute(node.id, digit) },
-                                onDelete = { viewModel.removeIvrNode(node.id) }
+                        item {
+                            PreferenceCard(
+                                icon = Icons.Outlined.Folder,
+                                title = stringResource(R.string.settings_import_mailbox_title),
+                                subtitle = stringResource(R.string.settings_import_mailbox_subtitle),
+                                onClick = { ivrImportLauncher.launch(arrayOf("text/xml", "application/xml")) }
                             )
+                        }
+                        item {
+                            PreferenceCard(
+                                icon = Icons.Outlined.Refresh,
+                                title = stringResource(R.string.settings_export_mailbox_title),
+                                subtitle = stringResource(R.string.settings_export_mailbox_subtitle),
+                                onClick = { ivrExportLauncher.launch("fakecall_mailbox.xml") }
+                            )
+                        }
+                        item {
+                            PreferenceCard(
+                                icon = Icons.Outlined.Add,
+                                title = stringResource(R.string.settings_add_node_title),
+                                subtitle = stringResource(R.string.settings_add_node_subtitle),
+                                onClick = { showAddNodeDialog = true }
+                            )
+                        }
+
+                        if (ivrNodes.isEmpty()) {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.settings_no_mailbox_nodes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        } else {
+                            items(ivrNodes) { node ->
+                                MailboxNodeCard(
+                                    node = node,
+                                    nodes = ivrNodes,
+                                    isRoot = ivrConfig?.rootId == node.id,
+                                    onSetRoot = { viewModel.setIvrRoot(node.id) },
+                                    onSelectAudio = {
+                                        pendingAudioNodeId = node.id
+                                        ivrAudioPicker.launch(arrayOf("audio/*"))
+                                    },
+                                    onClearAudio = { viewModel.clearIvrNodeAudio(node.id) },
+                                    onAddMapping = { mappingNodeId = node.id },
+                                    onRemoveMapping = { digit -> viewModel.removeIvrRoute(node.id, digit) },
+                                    onDelete = { viewModel.removeIvrNode(node.id) }
+                                )
+                            }
                         }
                     }
                 }

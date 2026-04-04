@@ -71,6 +71,9 @@ data class FakeCallUiState(
     val quickTriggerDelaySeconds: Int = QuickTriggerManager.DEFAULT_DELAY_SECONDS,
     val quickTriggerPresetName: String = "",
     val quickTriggerPresets: List<QuickTriggerPreset> = emptyList(),
+    val isMp3IvrModeEnabled: Boolean = false,
+    val mp3IvrFolderUri: String = "",
+    val mp3IvrFolderName: String = "",
     val startupUpdate: ReleaseInfo? = null
 )
 
@@ -113,7 +116,13 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
             quickTriggerCallerNumber = quickTriggerDefaults.callerNumber,
             quickTriggerDelaySeconds = quickTriggerDefaults.delaySeconds,
             quickTriggerPresetName = prefs.getString(KEY_QUICK_TRIGGER_PRESET_NAME, "").orEmpty(),
-            quickTriggerPresets = quickTriggerPresets
+            quickTriggerPresets = quickTriggerPresets,
+            isMp3IvrModeEnabled = prefs.getBoolean(KEY_MP3_IVR_MODE_ENABLED, false),
+            mp3IvrFolderUri = prefs.getString(KEY_MP3_IVR_FOLDER_URI, "").orEmpty(),
+            mp3IvrFolderName = prefs.getString(
+                KEY_MP3_IVR_FOLDER_NAME,
+                application.getString(R.string.settings_mp3_ivr_no_folder_selected)
+            ).orEmpty()
         )
     )
     val uiState: StateFlow<FakeCallUiState> = _uiState.asStateFlow()
@@ -561,6 +570,52 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun onMp3IvrModeEnabledChange(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_MP3_IVR_MODE_ENABLED, enabled).apply()
+        _uiState.update {
+            it.copy(
+                isMp3IvrModeEnabled = enabled,
+                statusMessage = if (enabled && it.mp3IvrFolderUri.isBlank()) {
+                    str(R.string.status_select_mp3_ivr_folder)
+                } else {
+                    it.statusMessage
+                }
+            )
+        }
+    }
+
+    fun onMp3IvrFolderSelected(uri: Uri?) {
+        if (uri == null) return
+        val resolver = getApplication<Application>().contentResolver
+        runCatching {
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val folderName = readableTreeLabel(uri)
+        prefs.edit()
+            .putString(KEY_MP3_IVR_FOLDER_URI, uri.toString())
+            .putString(KEY_MP3_IVR_FOLDER_NAME, folderName)
+            .apply()
+        _uiState.update {
+            it.copy(
+                mp3IvrFolderUri = uri.toString(),
+                mp3IvrFolderName = folderName
+            )
+        }
+    }
+
+    fun clearMp3IvrFolderSelection() {
+        prefs.edit()
+            .remove(KEY_MP3_IVR_FOLDER_URI)
+            .putString(KEY_MP3_IVR_FOLDER_NAME, str(R.string.settings_mp3_ivr_no_folder_selected))
+            .apply()
+        _uiState.update {
+            it.copy(
+                mp3IvrFolderUri = "",
+                mp3IvrFolderName = str(R.string.settings_mp3_ivr_no_folder_selected)
+            )
+        }
+    }
+
     fun saveProvider() {
         if (!uiState.value.hasRequiredPermissions) {
             _uiState.update { it.copy(statusMessage = str(R.string.status_grant_permissions_first)) }
@@ -942,6 +997,9 @@ class FakeCallViewModel(application: Application) : AndroidViewModel(application
         private const val KEY_RECORDING_ENABLED = "recording_enabled"
         private const val KEY_RECORDINGS_TREE_URI = "recordings_tree_uri"
         private const val KEY_RECORDINGS_FOLDER_NAME = "recordings_folder_name"
+        private const val KEY_MP3_IVR_MODE_ENABLED = "mp3_ivr_mode_enabled"
+        private const val KEY_MP3_IVR_FOLDER_URI = "mp3_ivr_folder_uri"
+        private const val KEY_MP3_IVR_FOLDER_NAME = "mp3_ivr_folder_name"
         private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
         private const val KEY_QUICK_TRIGGER_PRESET_NAME = "quick_trigger_preset_name"
 
